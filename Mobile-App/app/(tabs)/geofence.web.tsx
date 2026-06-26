@@ -12,11 +12,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GeofencePreview } from '@/components/geofence/GeofencePreview.web';
+import { ZonePlacePicker } from '@/components/geofence/ZonePlacePicker';
 import { FLEET_COLORS } from '@/constants/theme';
 import { useGeofenceConfig } from '@/hooks/useGeofenceConfig';
 
@@ -31,6 +32,9 @@ export default function GeofenceScreenWeb() {
   const [dirty, setDirty] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationHint, setLocationHint] = useState('Tap the map on mobile for precise center selection.');
+  const [placeQuery, setPlaceQuery] = useState('');
+  const { width } = useWindowDimensions();
+  const compactHeader = width < 380;
 
   useEffect(() => {
     if (config) {
@@ -41,6 +45,7 @@ export default function GeofenceScreenWeb() {
       setSpeedThreshold(String(config.speedThreshold));
       setUploadInterval(String(config.uploadInterval));
       setDirty(false);
+      setPlaceQuery('');
     }
   }, [config]);
 
@@ -122,12 +127,20 @@ export default function GeofenceScreenWeb() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
+        <View style={[styles.header, compactHeader && styles.headerCompact]}>
           <View>
-            <Text style={styles.title}>Geofence Config</Text>
-            <Text style={styles.subtitle}>Use the map on mobile to place the center, then save the thresholds here.</Text>
+            <Text style={[styles.title, compactHeader && styles.titleCompact]}>Geofence Config</Text>
+            <Text style={[styles.subtitle, compactHeader && styles.subtitleCompact]}>
+              Use the map on mobile to place the center, then save the thresholds here.
+            </Text>
           </View>
-          <View style={[styles.syncPill, { backgroundColor: syncColor + '22', borderColor: syncColor + '55' }]}>
+          <View
+            style={[
+              styles.syncPill,
+              compactHeader && styles.syncPillCompact,
+              { backgroundColor: syncColor + '22', borderColor: syncColor + '55' },
+            ]}
+          >
             <View style={[styles.syncDot, { backgroundColor: syncColor }]} />
             <Text style={[styles.syncLabel, { color: syncColor }]}>{syncLabel}</Text>
           </View>
@@ -142,21 +155,25 @@ export default function GeofenceScreenWeb() {
           </View>
         ) : (
           <>
-            <View style={styles.mapHelpCard}>
-              <Ionicons name="map-outline" size={18} color={FLEET_COLORS.primary} />
-              <View style={styles.mapHelpTextWrap}>
-                <Text style={styles.mapHelpTitle}>Map-first geofence setup</Text>
-                <Text style={styles.mapHelpText}>
-                  The mobile app lets you place the geofence center directly on the map. Web keeps the same settings visible and ready.
-                </Text>
-              </View>
-            </View>
-
-            <GeofencePreview
-              mapRef={{ current: null }}
-              latitude={parseFloat(lat) || 0}
-              longitude={parseFloat(lng) || 0}
+            <ZonePlacePicker
+              vehicleName="Global geofence"
+              vehicleLocation={null}
+              center={lat && lng ? { latitude: parseFloat(lat), longitude: parseFloat(lng) } : null}
               radius={parseFloat(radius) || 50}
+              query={placeQuery}
+              onQueryChange={(query) => {
+                setPlaceQuery(query);
+                mark();
+              }}
+              onSelectCenter={({ latitude, longitude }) => {
+                setLat(latitude.toFixed(6));
+                setLng(longitude.toFixed(6));
+                mark();
+                setLocationHint('Map center updated.');
+              }}
+              onUseVehicleLocation={useCurrentLocation}
+              primaryActionLabel="Use my location"
+              actionLoading={locating}
             />
 
             <View style={styles.locationCard}>
@@ -167,19 +184,6 @@ export default function GeofenceScreenWeb() {
                 </Text>
                 <Text style={styles.locationHint}>{locationHint}</Text>
               </View>
-              <TouchableOpacity
-                style={[styles.locationBtn, locating && styles.locationBtnDisabled]}
-                onPress={useCurrentLocation}
-                disabled={locating}
-                activeOpacity={0.8}
-              >
-                {locating ? (
-                  <ActivityIndicator size="small" color={FLEET_COLORS.primary} />
-                ) : (
-                  <Ionicons name="navigate-circle-outline" size={16} color={FLEET_COLORS.primary} />
-                )}
-                <Text style={styles.locationBtnText}>{locating ? 'Locating...' : 'Use my location'}</Text>
-              </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
@@ -309,8 +313,16 @@ const styles = StyleSheet.create({
     borderBottomColor: FLEET_COLORS.border,
     gap: 12,
   },
+  headerCompact: {
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 10 : 10,
+    paddingBottom: 10,
+    gap: 10,
+  },
   title: { color: FLEET_COLORS.textPrimary, fontSize: 22, fontWeight: '700' },
+  titleCompact: { fontSize: 19 },
   subtitle: { color: FLEET_COLORS.textSecondary, fontSize: 12, marginTop: 4, maxWidth: 280, lineHeight: 17 },
+  subtitleCompact: { maxWidth: 220, fontSize: 11.5, lineHeight: 16 },
   syncPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -320,6 +332,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+  syncPillCompact: { paddingHorizontal: 8, paddingVertical: 3, gap: 4 },
   syncDot: { width: 6, height: 6, borderRadius: 3 },
   syncLabel: { fontSize: 12, fontWeight: '600' },
   content: { padding: 16, gap: 12, paddingBottom: 48 },
@@ -359,23 +372,6 @@ const styles = StyleSheet.create({
   },
   locationTitle: { color: FLEET_COLORS.textPrimary, fontSize: 16, fontWeight: '700' },
   locationHint: { color: FLEET_COLORS.textSecondary, fontSize: 12, lineHeight: 17 },
-  locationBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: FLEET_COLORS.primary + '1A',
-    borderWidth: 1,
-    borderColor: FLEET_COLORS.primary + '55',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  locationBtnDisabled: { opacity: 0.5 },
-  locationBtnText: {
-    color: FLEET_COLORS.primary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   section: {
     backgroundColor: FLEET_COLORS.surface,
     borderRadius: 12,

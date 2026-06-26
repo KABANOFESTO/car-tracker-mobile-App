@@ -16,6 +16,7 @@ import {
 
 import { FLEET_COLORS } from "@/constants/theme";
 import { GeofenceZoneType, VehicleType } from "@/constants/types";
+import { ZonePlacePicker } from "@/components/geofence/ZonePlacePicker";
 import { useVehicleSecurity } from "@/hooks/useVehicleSecurity";
 import { useVehicles } from "@/hooks/useVehicles";
 import { removeVehicle, updateVehicle } from "@/services/vehicleService";
@@ -58,6 +59,7 @@ export default function VehicleDetailScreen() {
   const [zoneLat, setZoneLat] = useState("");
   const [zoneLng, setZoneLng] = useState("");
   const [zoneRadius, setZoneRadius] = useState("20");
+  const [zonePlaceQuery, setZonePlaceQuery] = useState("");
 
   useEffect(() => {
     if (vehicle) {
@@ -130,9 +132,22 @@ export default function VehicleDetailScreen() {
       setZoneLat("");
       setZoneLng("");
       setZoneRadius("20");
+      setZonePlaceQuery("");
     } catch {
       Alert.alert("Error", "Failed to save zone.");
     }
+  }
+
+  function useVehicleLocationForZone() {
+    if (!vehicle) return;
+    if (vehicle.location.latitude === 0 && vehicle.location.longitude === 0) {
+      Alert.alert("No live location", "This vehicle does not have a live GPS position yet.");
+      return;
+    }
+    setZoneLat(vehicle.location.latitude.toFixed(6));
+    setZoneLng(vehicle.location.longitude.toFixed(6));
+    setZonePlaceQuery(vehicle.name);
+    mark();
   }
 
   function handleDelete() {
@@ -393,9 +408,32 @@ export default function VehicleDetailScreen() {
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Add vehicle zone</Text>
             <InlineField label="Zone name" value={zoneName} onChangeText={setZoneName} placeholder="e.g. Night Parking" />
-            <InlineField label="Latitude" value={zoneLat} onChangeText={setZoneLat} placeholder="-1.9441" keyboardType="decimal-pad" />
-            <InlineField label="Longitude" value={zoneLng} onChangeText={setZoneLng} placeholder="30.0619" keyboardType="decimal-pad" />
-            <InlineField label="Radius (m)" value={zoneRadius} onChangeText={setZoneRadius} placeholder="20" keyboardType="number-pad" />
+            <ZonePlacePicker
+              vehicleName={vehicle.name}
+              vehicleLocation={vehicle.location.latitude !== 0 || vehicle.location.longitude !== 0 ? vehicle.location : null}
+              center={
+                zoneLat && zoneLng
+                  ? { latitude: parseFloat(zoneLat), longitude: parseFloat(zoneLng) }
+                  : null
+              }
+              radius={parseFloat(zoneRadius) || 20}
+              query={zonePlaceQuery}
+              onQueryChange={(query) => {
+                setZonePlaceQuery(query);
+                mark();
+              }}
+              onSelectCenter={({ latitude, longitude }) => {
+                setZoneLat(latitude.toFixed(6));
+                setZoneLng(longitude.toFixed(6));
+                mark();
+              }}
+              onUseVehicleLocation={useVehicleLocationForZone}
+            />
+            <View style={styles.compactFields}>
+              <InlineField label="Latitude" value={zoneLat} onChangeText={(value) => { setZoneLat(value); mark(); }} placeholder="-1.9441" keyboardType="decimal-pad" />
+              <InlineField label="Longitude" value={zoneLng} onChangeText={(value) => { setZoneLng(value); mark(); }} placeholder="30.0619" keyboardType="decimal-pad" />
+              <InlineField label="Radius (m)" value={zoneRadius} onChangeText={(value) => { setZoneRadius(value); mark(); }} placeholder="20" keyboardType="number-pad" />
+            </View>
 
             <Text style={styles.zoneTypeTitle}>Zone type</Text>
             <View style={styles.zoneTypeRow}>
@@ -662,6 +700,7 @@ const styles = StyleSheet.create({
   typeOptionTextSelected: { color: FLEET_COLORS.primary, fontWeight: "600" },
   zoneTypeTitle: { color: FLEET_COLORS.textSecondary, fontSize: 11, fontWeight: "600", letterSpacing: 1, marginTop: 12, marginBottom: 8 },
   zoneTypeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  compactFields: { gap: 0 },
   zoneTypeChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
